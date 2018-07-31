@@ -39,19 +39,36 @@ class MIDI:
 	
 	def __init__(self):
 		self.tracks = []
+		self.track_size = 0
+		self.track_data = None
 		self.pointer = 0
 		print('Constructing MIDI object...')
 		return
 
 	#
-	# FUNTION to read a variable length value
+	# FUNCTION to read a certain number of bytes of track data
 	#
-	def read_vlv(self, track_data):
+	def read_data(self, num_bytes):
+		start = self.pointer
+		end = self.pointer + num_bytes
+		if end <= self.track_size:
+			data = self.track_data[start:end]
+			self.pointer += num_bytes
+		return data
+
+	#
+	# FUNCTION to read a variable length value
+	#
+	def read_vlv(self):
 		value = 0
 		cont = True # Value continues to next byte
 		while cont:
-			char = track_data[self.pointer]
-			self.pointer += 1
+			# char = track_data[self.pointer]
+			char = int.from_bytes(self.read_data(1), 'big')
+			# self.pointer += 1
+
+			print(type(char))
+
 			if not (char & 0x80):
 				cont = False
 			char = char & 0x7F
@@ -86,10 +103,12 @@ class MIDI:
 						break # EOF reached...
 					elif chunk_id != b'MTrk':
 						raise TypeError('\"{}\": Bad track header.'.format(chunk_id))
-					track_size = struct.unpack('>L', f.read(4))[0]
-					print(' track_size:', track_size)
-					track_data = f.read(track_size)
-					pointer = 0
+					# track_size = struct.unpack('>L', f.read(4))[0]
+					# print(' track_size:', track_size)
+					# track_data = f.read(track_size)
+					self.track_size = struct.unpack('>L', f.read(4))[0]
+					self.track_data = f.read(self.track_size)
+					self.pointer = 0
 					# print(track_data[0])
 					# print(track_data[1])
 					self.tracks.append(Track())
@@ -102,12 +121,16 @@ class MIDI:
 
 						# Add a new event to the track's event list
 						self.tracks[t].events.append(Event())
-						self.tracks[t].events[ec].delta_time = self.read_vlv(track_data)
+						self.tracks[t].events[ec].delta_time = self.read_vlv()
 						print(self.tracks[t].events[ec].delta_time)
 
 						# Get the event's status and compare it to the previous status
-						status_byte = track_data[pointer]
-						self.pointer += 1
+						
+						# status_byte = track_data[pointer]
+						# self.pointer += 1
+
+						status_byte = self.read_data(1)
+
 						if status_byte == '':
 							break # EOF Reached
 						elif status_byte >= 128:
@@ -119,13 +142,17 @@ class MIDI:
 						# META event detected
 						if status_byte == 0xFF:
 							self.tracks[t].events[ec].type = 0xFF
-							meta_type = track_data[self.pointer]
-							self.pointer += 1
+							
+							# meta_type = track_data[self.pointer]
+							# self.pointer += 1
+
+							meta_type = self.read_data(1)
+							
 							self.tracks[t].events[ec].meta_type = meta_type
-							meta_length = read_vlv(track_data)
+							meta_length = read_vlv()
 
 							if 0x2F == meta_type:
-								print('Hello')
+								print(meta_type)
 
 						
 
