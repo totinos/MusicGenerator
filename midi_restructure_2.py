@@ -34,6 +34,7 @@ class Event:
 		return
 
 #
+# TODO --> MODIFY
 # CLASS to read a MIDI file into memory
 #
 class MIDI:	
@@ -41,35 +42,39 @@ class MIDI:
 	def __init__(self):
 		self.tracks = []
 		self.track_size = 0
+
+		self.file_size = 0
 		self.file_data = None
 		self.pointer = 0
+
 		print('Constructing MIDI object...')
 		return
 
-	#
-	# FUNCTION to read a certain number of bytes of track data
-	#
-	def read_data(self, num_bytes):
+	# TODO --> Add error checking to this function
+	def read_str(self, num_bytes):
 		start = self.pointer
 		end = self.pointer + num_bytes
-		if end <= self.track_size:
-			data = self.file_data[start:end]
-			self.pointer += num_bytes
-		return data
+		data = self.file_data[start:end]
+		self.pointer += num_bytes
+		return data.decode('ASCII')
 
-	#
+	# TODO --> Add error checking to this function
+	def read_int(self, num_bytes):
+		start = self.pointer
+		end = self.pointer + num_bytes
+		data = self.file_data[start:end]
+		self.pointer += num_bytes
+		return int.from_bytes(data, byteorder='big')
+
+	# TODO --> MODIFY
 	# FUNCTION to read a variable length value
-	#
 	def read_vlv(self):
 		value = 0
 		cont = True # Value continues to next byte
 		while cont:
 			# char = track_data[self.pointer]
-			char = self.read_data(1)
+			char = self.read_int(1)
 			# self.pointer += 1
-
-			print(type(char))
-
 			if not (char & 0x80):
 				cont = False
 			char = char & 0x7F
@@ -78,46 +83,45 @@ class MIDI:
 		return value
 
 	#
+	# TODO --> MODIFY
 	# FUNCTION to read a MIDI file
 	#
 	def read_file(self, midi_file):
 		try:
-			with open(midi_file, 'rb') as f:	
-				
-				##### PARSE FILE HEADER CHUNK #####
-				chunk_id = f.read(4)
-				if chunk_id != b'MThd':
-					raise TypeError('\"{}\": File header chunk not found.'.format(midi_file))
-				data = struct.unpack('>LHHH', f.read(10))
-				header_size = data[0]
-				print(header_size)
-				file_format = data[1]
-				print(file_format)
-				num_tracks = data[2]
-				print('Num tracks:', num_tracks)
-				resolution = data[3]
-				print(resolution)
-				if header_size > DEFAULT_MIDI_HEADER_SIZE:
-					f.read(header_size - DEFAULT_MIDI_HEADER_SIZE)
 
-				##### PARSE ALL OTHER CHUNKS #####
+			self.file_size = os.path.getsize(midi_file)
+			print(self.file_size)
+			with open(midi_file, 'rb') as f:
+
+				self.file_data = f.read(self.file_size)
+				chunk_id = self.read_str(4)
+				if chunk_id != 'MThd':
+					raise TypeError('\"{}\": MThd chunk not found.'.format(midi_file))
+				header_size = self.read_int(4)
+				# print(header_size)
+				file_format = self.read_int(2)
+				# print(file_format)
+				num_tracks = self.read_int(2)
+				# print(num_tracks)
+				resolution = self.read_int(2)
+				# print(resolution)
+
+				if header_size > DEFAULT_MIDI_HEADER_SIZE:
+					self.read_int(header_size - DEFAULT_MIDI_HEADER_SIZE) # Read misc bytes
+
+				#
+				# Go through all tracks and add events
+				#
 				for t in range(num_tracks):
-					chunk_id = f.read(4)
-					if chunk_id == '':
-						break # EOF reached...
-					elif chunk_id != b'MTrk':
-						raise TypeError('\"{}\": Bad track header.'.format(chunk_id))
-					# track_size = struct.unpack('>L', f.read(4))[0]
-					# print(' track_size:', track_size)
-					# track_data = f.read(track_size)
-					self.track_size = struct.unpack('>L', f.read(4))[0]
-					self.track_data = f.read(self.track_size)
-					self.pointer = 0
-					# print(track_data[0])
-					# print(track_data[1])
+					chunk_id = self.read_str(4)
+					print(chunk_id)
+					if chunk_id != 'MTrk':
+						raise TypeError('\"{}\": MTrk chunk corrupted.'.format(midi_file))
+					self.track_size = self.read_int(4)
+					print(self.track_size)
 					self.tracks.append(Track())
 
-					ec = 0 # Event counter
+					ec = 0
 					end_of_track = False
 					status_byte = None
 					last_status_byte = None
@@ -126,22 +130,26 @@ class MIDI:
 						# Add a new event to the track's event list
 						self.tracks[t].events.append(Event())
 						self.tracks[t].events[ec].delta_time = self.read_vlv()
-						print(self.tracks[t].events[ec].delta_time)
+						# print(self.tracks[t].events[ec].delta_time)
 
-						# Get the event's status and compare it to the previous status
-						
-						# status_byte = track_data[pointer]
-						# self.pointer += 1
-
-						status_byte = self.read_data(1)
-
-						if status_byte == '':
-							break # EOF Reached
-						elif status_byte >= 128:
-							last_status_byte = status_byte # New status detected
+						status_byte = self.read_int(1)
+						if status_byte >= 128:
+							last_status_byte = status_byte
 						else:
-							status_byte = last_status_byte # No new status, reset pointer
+							status_byte = last_status_byte
 							self.pointer -= 1
+
+						ec += 1
+						if ec == 100:
+							end_of_track = True
+
+					# self.read_int(self.track_size) # Read the whole track to get it out of the way
+				
+				exit(1)
+
+				
+				##### OLD FILE MATERIAL #####
+
 
 						# META event detected
 						if status_byte == 0xFF:
