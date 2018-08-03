@@ -43,11 +43,11 @@ class Track:
 # CLASS to store information about a MIDI event
 #
 class Event:
-  def __init__(self):
-    self.data = None
-    self.delta_time = None
-    self.meta_type = None
-    self.type = None
+  def __init__(self, data=None, delta_time=None, meta_type=None, etype=None):
+    self.data = data
+    self.delta_time = delta_time
+    self.meta_type = meta_type
+    self.type = etype
     # print('  Creating event')
     return
 
@@ -59,6 +59,7 @@ class MIDI:
   
   def __init__(self):
     self.tracks = []
+    self.resolution = 0
     self.track_size = 0
 
     self.file_size = 0
@@ -116,125 +117,125 @@ class MIDI:
       self.file_size = os.path.getsize(midi_file)
       print(self.file_size)
       with open(midi_file, 'rb') as f:
-
         self.file_data = f.read(self.file_size)
-        chunk_id = self.read_str(4)
-        if chunk_id != 'MThd':
-          raise TypeError('\"{}\": MThd chunk not found.'.format(midi_file))
-        header_size = self.read_int(4)
-        # print(header_size)
-        file_format = self.read_int(2)
-        # print(file_format)
-        num_tracks = self.read_int(2)
-        # print(num_tracks)
-        resolution = self.read_int(2)
-        # print(resolution)
-
-        if header_size > DEFAULT_MIDI_HEADER_SIZE:
-          self.read_int(header_size - DEFAULT_MIDI_HEADER_SIZE) # Read misc bytes
-
-        #
-        # Go through all tracks and add events
-        #
-        for t in range(num_tracks):
-          chunk_id = self.read_str(4)
-          print(chunk_id)
-          if chunk_id != 'MTrk':
-            raise TypeError('\"{}\": MTrk chunk corrupted.'.format(midi_file))
-          self.track_size = self.read_int(4)
-          print(self.track_size)
-          self.tracks.append(Track())
-
-          #
-          # Read events until the end of the current track is reached
-          #
-          ec = 0
-          end_of_track = False
-          status_byte = None
-          last_status_byte = None
-          while not end_of_track:
-
-            # Add a new event to the track's event list
-            self.tracks[t].events.append(Event())
-            self.tracks[t].events[ec].delta_time = self.read_vlv()
-            # print(self.tracks[t].events[ec].delta_time)
-
-            status_byte = self.read_int(1)
-            if status_byte >= 128:
-              last_status_byte = status_byte
-            else:
-              status_byte = last_status_byte
-              self.pointer -= 1
-
-            # print('SB:', status_byte)
-
-
-            #
-            # Classify as meta event or other and read data accordingly
-            #
-            if status_byte == 0xFF:
-              self.tracks[t].events[ec].type = 0xFF
-              meta_type = self.read_int(1)
-              meta_length = self.read_vlv()
-              self.tracks[t].events[ec].meta_type = meta_type
-
-              # print('. meta_type:', meta_type)
-              # print('. meta_length:', meta_length)
-              if meta_type == 0x2F:
-                end_of_track = True
-              elif (meta_type == 0x01 or meta_type == 0x02 or
-                    meta_type == 0x03 or meta_type == 0x06):
-                self.tracks[t].events[ec].data = self.read_str(meta_length)
-              elif (meta_type == 0x21 or meta_type == 0x59 or
-                    meta_type == 0x51):
-                self.tracks[t].events[ec].data = self.read_int(meta_length)
-              elif meta_type == 0x54:
-                self.tracks[t].events[ec].data = []
-                for i in range(0, 5):
-                  self.tracks[t].events[ec].data.append(self.read_int(1))
-              elif meta_type == 0x58:
-                self.tracks[t].events[ec].data = []
-                for i in range(0, 4):
-                  self.tracks[t].events[ec].data.append(self.read_int(1))
-              else:
-                print('DEFAULT META CASE HANDLED.')
-
-            #
-            # NOT a meta event, treat as sysex or other event type
-            #
-            else:
-              event_type = status_byte >> 4
-              channel = status_byte & 0x0F
-              # print('ET', event_type)
-              # print('Ch', channel)
-              self.tracks[t].events[ec].type = event_type
-              self.tracks[t].events[ec].channel = channel ### Not defined but it still works?
-
-              if event_type == 0xF:
-                print('Sysex event.')
-              elif (event_type == 0xA or event_type == 0xB or
-                    event_type == 0xE or event_type == 0x8 or
-                    event_type == 0x9):
-                self.tracks[t].events[ec].data = []
-                for i in range(0, 2):
-                  self.tracks[t].events[ec].data.append(self.read_int(1))
-              elif (event_type == 0xC or event_type == 0xD):
-                self.tracks[t].events[ec].data = self.read_int(1)
-              else:
-                print('DEFAULT REG CASE HANDLED')
-
-            # Increment the number of events encountered thus far
-            ec += 1
-
         
-          print('Finished reading track.')
-          # print(self.tracks[t].events)
+      chunk_id = self.read_str(4)
+      if chunk_id != 'MThd':
+        raise TypeError('\"{}\": MThd chunk not found.'.format(midi_file))
+      header_size = self.read_int(4)
+      # print(header_size)
+      file_format = self.read_int(2)
+      # print(file_format)
+      num_tracks = self.read_int(2)
+      # print(num_tracks)
+      self.resolution = self.read_int(2)
+      # print(resolution)
+
+      if header_size > DEFAULT_MIDI_HEADER_SIZE:
+        self.read_int(header_size - DEFAULT_MIDI_HEADER_SIZE) # Read misc bytes
+
+      #
+      # Go through all tracks and add events
+      #
+      for t in range(num_tracks):
+        chunk_id = self.read_str(4)
+        print(chunk_id)
+        if chunk_id != 'MTrk':
+          raise TypeError('\"{}\": MTrk chunk corrupted.'.format(midi_file))
+        self.track_size = self.read_int(4)
+        print(self.track_size)
+        self.tracks.append(Track())
+
+        #
+        # Read events until the end of the current track is reached
+        #
+        ec = 0
+        end_of_track = False
+        status_byte = None
+        last_status_byte = None
+        while not end_of_track:
+
+          # Add a new event to the track's event list
+          self.tracks[t].events.append(Event())
+          self.tracks[t].events[ec].delta_time = self.read_vlv()
+          # print(self.tracks[t].events[ec].delta_time)
+
+          status_byte = self.read_int(1)
+          if status_byte >= 128:
+            last_status_byte = status_byte
+          else:
+            status_byte = last_status_byte
+            self.pointer -= 1
+
+          # print('SB:', status_byte)
+
+
+          #
+          # Classify as meta event or other and read data accordingly
+          #
+          if status_byte == 0xFF:
+            self.tracks[t].events[ec].type = 0xFF
+            meta_type = self.read_int(1)
+            meta_length = self.read_vlv()
+            self.tracks[t].events[ec].meta_type = meta_type
+
+            # print('. meta_type:', meta_type)
+            # print('. meta_length:', meta_length)
+            if meta_type == 0x2F:
+              end_of_track = True
+            elif (meta_type == 0x01 or meta_type == 0x02 or
+                  meta_type == 0x03 or meta_type == 0x06):
+              self.tracks[t].events[ec].data = self.read_str(meta_length)
+            elif (meta_type == 0x21 or meta_type == 0x59 or
+                  meta_type == 0x51):
+              self.tracks[t].events[ec].data = self.read_int(meta_length)
+            elif meta_type == 0x54:
+              self.tracks[t].events[ec].data = []
+              for i in range(0, 5):
+                self.tracks[t].events[ec].data.append(self.read_int(1))
+            elif meta_type == 0x58:
+              self.tracks[t].events[ec].data = []
+              for i in range(0, 4):
+                self.tracks[t].events[ec].data.append(self.read_int(1))
+            else:
+              print('DEFAULT META CASE HANDLED.')
+
+          #
+          # NOT a meta event, treat as sysex or other event type
+          #
+          else:
+            event_type = status_byte >> 4
+            channel = status_byte & 0x0F
+            # print('ET', event_type)
+            # print('Ch', channel)
+            self.tracks[t].events[ec].type = event_type
+            self.tracks[t].events[ec].channel = channel ### Not defined but it still works?
+
+            if event_type == 0xF:
+              print('Sysex event.')
+            elif (event_type == 0xA or event_type == 0xB or
+                  event_type == 0xE or event_type == 0x8 or
+                  event_type == 0x9):
+              self.tracks[t].events[ec].data = []
+              for i in range(0, 2):
+                self.tracks[t].events[ec].data.append(self.read_int(1))
+            elif (event_type == 0xC or event_type == 0xD):
+              self.tracks[t].events[ec].data = self.read_int(1)
+            else:
+              print('DEFAULT REG CASE HANDLED')
+
+          # Increment the number of events encountered thus far
+          ec += 1
+
+      
+        print('Finished reading track.')
+        # print(self.tracks[t].events)
 
         
     except TypeError as err:
       print(err)
 
-    return
+    return self.tracks
 
 if __name__ == '__main__':
   filename = sys.argv[1]
